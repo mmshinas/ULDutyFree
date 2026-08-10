@@ -1,0 +1,11 @@
+{
+  "name": "Serendib Treasures Catalog",
+  "short_name": "Serendib",
+  "description": "SriLankan Airlines inflight duty-free catalog browser",
+  "start_url": "index.html",
+  "display": "standalone",
+  "background_color": "#F5F0E4",
+  "theme_color": "#F5F0E4",
+  "orientation": "portrait",
+  "icons": []
+}
