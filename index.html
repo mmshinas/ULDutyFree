@@ -288,6 +288,15 @@
   /* ---------- Cart ---------- */
   .cart-row{ display:flex; align-items:flex-start; gap:12px; padding:14px 4px; border-bottom:1px dashed var(--hairline); }
   .cart-qty-stepper{ display:flex; align-items:center; gap:8px; margin-top:8px; }
+  .crew-staff-fields{ display:flex; gap:8px; margin-top:8px; }
+  .crew-staff-input{
+    min-width:0; padding:9px 10px; border:1px solid var(--hairline);
+    border-radius:8px; background:var(--paper-raised); font-family:Georgia, serif;
+    font-size:0.78rem; color:var(--ink);
+  }
+  .staff-no-input{ flex:1; }
+  .staff-name-input{ flex:2; }
+  .crew-staff-input:invalid, .crew-staff-input.missing{ border-color:var(--pink-ink); }
   .cart-qty{ font-family: ui-monospace, monospace; font-size:0.85rem; min-width:14px; text-align:center; }
   .cart-remove{
     margin-left:6px; background:none; border:none; color:var(--pink-ink);
@@ -905,8 +914,6 @@ function allCategoriesConfirmed(){
 }
 function isFlightOpen(){
   if(!flightDetailsComplete()) return false;
-  const totalStock = ITEMS.reduce((sum, it) => sum + getStock(it.itemCode), 0);
-  if(totalStock <= 0) return false;
   return allCategoriesConfirmed();
 }
 
@@ -916,6 +923,10 @@ function loadCart(){
   try{
     const raw = localStorage.getItem('cart_state');
     cart = raw ? JSON.parse(raw) : [];
+    cart.forEach(c => {
+      if(c.crewStaffNo === undefined) c.crewStaffNo = '';
+      if(c.crewStaffName === undefined) c.crewStaffName = '';
+    });
   } catch(e){ cart = []; }
 }
 function saveCart(){
@@ -932,7 +943,7 @@ function addToCart(it, qty, unitPrice, priceLabel){
   const existing = cart.find(c => c.itemCode === it.itemCode && c.priceLabel === priceLabel);
   if(existing){ existing.qty += qty; }
   else{
-    cart.push({ itemCode: it.itemCode, itemNo: it.itemNo, name: it.name, category: it.category, unitPrice, priceLabel, qty });
+    cart.push({ itemCode: it.itemCode, itemNo: it.itemNo, name: it.name, category: it.category, unitPrice, priceLabel, qty, crewStaffNo: '', crewStaffName: '' });
   }
   saveCart();
 }
@@ -1003,7 +1014,8 @@ function recordSale(cartEntries){
     log.push({
       itemCode: c.itemCode, itemNo: c.itemNo, name: c.name, category: c.category,
       priceLabel: c.priceLabel, unitPrice: c.unitPrice, qty: c.qty,
-      lineTotal: c.qty * c.unitPrice, timestamp: ts
+      lineTotal: c.qty * c.unitPrice, timestamp: ts,
+      crewStaffNo: c.crewStaffNo || '', crewStaffName: c.crewStaffName || ''
     });
   });
   saveSalesLog(log);
@@ -1012,9 +1024,13 @@ function isPassengerLabel(label){ return label === 'Listed' || label === 'Specia
 function summarizeLog(log){
   const map = {};
   log.forEach(l => {
-    const key = l.itemCode + '|' + l.priceLabel;
+    const staffKey = l.priceLabel === 'Crew' ? (l.crewStaffNo || '') + '|' + (l.crewStaffName || '') : '';
+    const key = l.itemCode + '|' + l.priceLabel + '|' + staffKey;
     if(!map[key]){
-      map[key] = { itemCode:l.itemCode, name:l.name, priceLabel:l.priceLabel, unitPrice:l.unitPrice, qty:0, lineTotal:0 };
+      map[key] = {
+        itemCode:l.itemCode, name:l.name, priceLabel:l.priceLabel, unitPrice:l.unitPrice, qty:0, lineTotal:0,
+        crewStaffNo: l.crewStaffNo || '', crewStaffName: l.crewStaffName || ''
+      };
     }
     map[key].qty += l.qty;
     map[key].lineTotal += l.lineTotal;
@@ -1068,6 +1084,16 @@ function paymentLinesTotalUSD(){
 }
 function goToPayment(){
   if(cart.length === 0) return;
+  if(cartTransactionType() === 'crew'){
+    const missing = cart.some(c => !(c.crewStaffNo && c.crewStaffNo.trim()) || !(c.crewStaffName && c.crewStaffName.trim()));
+    if(missing){
+      showToast('Enter Staff No and Name for every item before completing a staff sale');
+      document.querySelectorAll('.crew-staff-input').forEach(inp => {
+        if(!inp.value.trim()) inp.classList.add('missing');
+      });
+      return;
+    }
+  }
   state.paymentMethod = null;
   state.paymentLines = [];
   state.view = 'payment';
@@ -1106,6 +1132,12 @@ function catCounts(){
 function fmt(n){
   return '$' + Number(n).toFixed(0);
 }
+/* Internal data still uses "Crew"/"crew" as the stored price-tier identifier
+   (for compatibility with existing sales/archive records) — this only maps
+   it to "Staff" wherever it's actually shown to the user. */
+function displayPriceLabel(label){
+  return label === 'Crew' ? 'Staff' : label;
+}
 
 function catClass(idx){ return 'jc' + (idx % 7); }
 
@@ -1139,7 +1171,7 @@ function render(){
     tagline.textContent = 'Choose how the customer is paying';
     renderPayment(main);
   } else if(state.view === 'session'){
-    tagline.textContent = 'Passenger and crew sales for this flight';
+    tagline.textContent = 'Passenger and staff sales for this flight';
     renderSessionSummary(main);
   } else if(state.view === 'flightHistory'){
     tagline.textContent = 'Past closed flights and their reports';
@@ -1516,6 +1548,8 @@ function renderCart(main){
     return;
   }
 
+  const isCrewCart = cartTransactionType() === 'crew';
+
   const rowsHtml = cart.map(c => {
     const cartItem = ITEMS.find(i => i.itemCode === c.itemCode);
     const img = cartItem ? getItemImage(cartItem) : null;
@@ -1525,13 +1559,18 @@ function renderCart(main){
       <div class="item-thumb">${thumbInner}</div>
       <div class="item-mid">
         <div class="item-name">${escapeHtml(c.name)}</div>
-        <div class="item-code mono">${escapeHtml(c.itemCode)} · ${escapeHtml(c.priceLabel)} ${fmt(c.unitPrice)}</div>
+        <div class="item-code mono">${escapeHtml(c.itemCode)} · ${escapeHtml(displayPriceLabel(c.priceLabel))} ${fmt(c.unitPrice)}</div>
         <div class="cart-qty-stepper">
           <button class="qty-btn sm" type="button" data-action="dec">−</button>
           <span class="cart-qty">${c.qty}</span>
           <button class="qty-btn sm" type="button" data-action="inc">+</button>
           <button class="cart-remove" type="button" data-action="remove">Remove</button>
         </div>
+        ${isCrewCart ? `
+        <div class="crew-staff-fields">
+          <input type="text" class="crew-staff-input staff-no-input" data-field="crewStaffNo" placeholder="Staff No" inputmode="numeric" value="${escapeAttr(c.crewStaffNo || '')}">
+          <input type="text" class="crew-staff-input staff-name-input" data-field="crewStaffName" placeholder="Staff Name" autocapitalize="characters" value="${escapeAttr(c.crewStaffName || '')}">
+        </div>` : ''}
       </div>
       <div class="item-price">
         <div class="amt">${fmt(c.qty * c.unitPrice)}</div>
@@ -1542,6 +1581,7 @@ function renderCart(main){
   main.innerHTML = `
     <div class="list-title">Cart</div>
     <div class="list-count">${cart.length} line item${cart.length===1?'':'s'} · ${cartCount()} unit${cartCount()===1?'':'s'}</div>
+    ${isCrewCart ? '<div class="stock-note" style="margin:0 0 4px;">Staff sale — enter the Staff No and Name for each item before completing the sale.</div>' : ''}
     ${rowsHtml}
     <div class="cart-footer">
       <div class="cart-total-line"><span>Total</span><span class="mono">${fmt(cartTotal())}</span></div>
@@ -1551,6 +1591,30 @@ function renderCart(main){
     ${floatingHomeBarHtml()}
   `;
 
+  main.querySelectorAll('.crew-staff-input').forEach(inp => {
+    inp.addEventListener('input', () => {
+      const start = inp.selectionStart;
+      const end = inp.selectionEnd;
+      const before = inp.value;
+      if(inp.classList.contains('staff-no-input')){
+        inp.value = inp.value.replace(/[^0-9]/g, '');
+      } else if(inp.classList.contains('staff-name-input')){
+        inp.value = inp.value.toUpperCase();
+      }
+      if(inp.value !== before){
+        const shift = inp.value.length - before.length;
+        inp.setSelectionRange(Math.max(0, start + shift), Math.max(0, end + shift));
+      }
+      const row = inp.closest('.cart-row');
+      const code = row.dataset.code, label = row.dataset.pricelabel;
+      const entry = cart.find(c => c.itemCode === code && c.priceLabel === label);
+      if(entry){
+        entry[inp.dataset.field] = inp.value;
+        saveCart();
+      }
+      if(inp.value.trim()) inp.classList.remove('missing');
+    });
+  });
 
   main.querySelectorAll('.cart-row').forEach(row => {
     const code = row.dataset.code, label = row.dataset.pricelabel;
@@ -1626,7 +1690,19 @@ function buildReportHtml(meta, log, stockRows, payments){
     return items.map(i => `
       <tr>
         <td>${escapeHtml(i.name)}</td>
-        <td>${escapeHtml(i.itemCode)} · ${escapeHtml(i.priceLabel)}</td>
+        <td>${escapeHtml(i.itemCode)} · ${escapeHtml(displayPriceLabel(i.priceLabel))}</td>
+        <td class="num">${i.qty}</td>
+        <td class="num">${fmt(i.unitPrice)}</td>
+        <td class="num">${fmt(i.lineTotal)}</td>
+      </tr>`).join('');
+  }
+  function crewSalesRows(items){
+    if(items.length === 0) return '<tr><td colspan="6" class="rpt-empty">No items in this section.</td></tr>';
+    return items.map(i => `
+      <tr>
+        <td>${escapeHtml(i.name)}</td>
+        <td>${escapeHtml(i.itemCode)}</td>
+        <td>${escapeHtml(i.crewStaffNo || '—')} · ${escapeHtml(i.crewStaffName || '—')}</td>
         <td class="num">${i.qty}</td>
         <td class="num">${fmt(i.unitPrice)}</td>
         <td class="num">${fmt(i.lineTotal)}</td>
@@ -1667,11 +1743,11 @@ function buildReportHtml(meta, log, stockRows, payments){
         <tr class="rpt-subtotal-row"><td colspan="4">Passenger Subtotal</td><td class="num">${fmt(passengerTotal)}</td></tr>
       </table>
 
-      <div class="rpt-section-title">Sold to Crew</div>
+      <div class="rpt-section-title">Sold to Staff</div>
       <table class="rpt-table">
-        <tr><th>Item</th><th>Code / Tier</th><th class="num">Qty</th><th class="num">Unit</th><th class="num">Total</th></tr>
-        ${salesRows(crewItems)}
-        <tr class="rpt-subtotal-row"><td colspan="4">Crew Subtotal</td><td class="num">${fmt(crewTotal)}</td></tr>
+        <tr><th>Item</th><th>Code</th><th>Staff No / Name</th><th class="num">Qty</th><th class="num">Unit</th><th class="num">Total</th></tr>
+        ${crewSalesRows(crewItems)}
+        <tr class="rpt-subtotal-row"><td colspan="5">Staff Subtotal</td><td class="num">${fmt(crewTotal)}</td></tr>
       </table>
 
       <div class="rpt-grand-total"><span>Grand Total</span><span>${fmt(grandTotal)}</span></div>
@@ -1892,8 +1968,8 @@ function renderSessionSummary(main){
       <div class="session-row">
         <div class="session-row-mid">
           <div class="item-name">${escapeHtml(i.name)}</div>
-          <div class="item-code mono">${escapeHtml(i.itemCode)} · ${fmt(i.unitPrice)} × ${i.qty}</div>
-          <span class="session-tag">${escapeHtml(i.priceLabel)}</span>
+          <div class="item-code mono">${escapeHtml(i.itemCode)} · ${fmt(i.unitPrice)} × ${i.qty}${i.priceLabel === 'Crew' ? ` · ${escapeHtml(i.crewStaffNo || '—')} ${escapeHtml(i.crewStaffName || '—')}` : ''}</div>
+          <span class="session-tag">${escapeHtml(displayPriceLabel(i.priceLabel))}</span>
         </div>
         <div class="item-price"><div class="amt">${fmt(i.lineTotal)}</div></div>
       </div>`).join('');
@@ -1910,9 +1986,9 @@ function renderSessionSummary(main){
     ${sectionRows(passengerItems)}
     <div class="session-subtotal"><span>Passenger subtotal</span><span class="mono">${fmt(passengerTotal)}</span></div>
 
-    <div class="section-label" style="margin-top:20px;">Sold to Crew</div>
+    <div class="section-label" style="margin-top:20px;">Sold to Staff</div>
     ${sectionRows(crewItems)}
-    <div class="session-subtotal"><span>Crew subtotal</span><span class="mono">${fmt(crewTotal)}</span></div>
+    <div class="session-subtotal"><span>Staff subtotal</span><span class="mono">${fmt(crewTotal)}</span></div>
 
     <div class="cart-footer">
       <div class="cart-total-line"><span>Grand Total</span><span class="mono">${fmt(grandTotal)}</span></div>
@@ -1990,7 +2066,7 @@ function renderFlightHistory(main){
           <div class="archive-card-total">${fmt(s.grandTotal)}</div>
         </div>
         <div class="archive-card-meta">${s.flightDate ? escapeHtml(s.flightDate) + ' · ' : ''}Closed ${new Date(s.closedAt).toLocaleString()}</div>
-        <div class="archive-card-stats mono">${s.lines.length} line${s.lines.length===1?'':'s'} · Passenger ${fmt(s.passengerTotal)} · Crew ${fmt(s.crewTotal)}</div>
+        <div class="archive-card-stats mono">${s.lines.length} line${s.lines.length===1?'':'s'} · Passenger ${fmt(s.passengerTotal)} · Staff ${fmt(s.crewTotal)}</div>
         <div class="archive-actions">
           <button class="archive-btn" type="button" data-archive-id="${s.id}" data-action="report">Download Report</button>
           <button class="archive-btn danger" type="button" data-archive-id="${s.id}" data-action="delete">Delete</button>
@@ -2247,7 +2323,7 @@ function openSheet(it){
   if(crewPrice !== it.listedPrice){
     priceLines += `
       <div class="price-line special">
-        <div class="lbl">Crew price</div>
+        <div class="lbl">Staff price</div>
         <div class="val">${fmt(crewPrice)}</div>
       </div>`;
   }
@@ -2281,11 +2357,11 @@ function openSheet(it){
   priceChoiceHtml += `
       <label class="price-opt${lockCrewOpt ? ' disabled' : (crewSelected ? ' selected' : '')}" data-value="crew">
         <input type="radio" name="priceChoice" value="crew" ${lockCrewOpt ? 'disabled' : ''} ${crewSelected ? 'checked' : ''}>
-        <span>Crew<b>${fmt(crewPrice)}</b></span>
+        <span>Staff<b>${fmt(crewPrice)}</b></span>
       </label>
     </div>`;
   if(txType){
-    priceChoiceHtml += `<div class="tx-lock-note">Cart already has ${txType} sales — clear or complete it to switch price tiers.</div>`;
+    priceChoiceHtml += `<div class="tx-lock-note">Cart already has ${txType === 'crew' ? 'staff' : txType} sales — clear or complete it to switch price tiers.</div>`;
   }
 
   const maxAttr = ` max="${avail}"`;
