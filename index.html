@@ -225,6 +225,47 @@
     font-size:0.72rem; color:var(--pink-ink); font-style:italic;
     margin:-6px 0 14px;
   }
+
+  /* ---------- Payment method screen ---------- */
+  .payment-method-grid{ display:grid; grid-template-columns:1fr 1fr; gap:8px; margin:10px 0 4px; }
+  .payment-method-btn{
+    padding:15px 8px; border:1.5px solid var(--hairline); border-radius:12px;
+    background:var(--paper-raised); font-family:Georgia, serif; font-size:0.85rem;
+    font-weight:700; color:var(--ink); cursor:pointer; text-align:center;
+  }
+  .payment-method-btn.selected{ border-color:var(--gold); background:rgba(176,138,78,0.1); }
+  .payment-line-form{
+    display:flex; gap:8px; align-items:center; flex-wrap:wrap; margin:10px 0 4px;
+  }
+  .payment-select{
+    flex:1; min-width:90px; padding:11px 8px; border:1px solid var(--hairline);
+    border-radius:10px; background:var(--paper-raised); font-family:Georgia, serif;
+    font-size:0.85rem; color:var(--ink);
+  }
+  .payment-amount-input{
+    flex:1; min-width:90px; padding:11px 10px; border:1px solid var(--hairline);
+    border-radius:10px; background:var(--paper-raised); font-family: ui-monospace, monospace;
+    font-size:0.9rem; color:var(--ink);
+  }
+  .payment-add-btn{
+    padding:11px 18px; border:none; border-radius:10px; background:var(--ink);
+    color:var(--paper-raised); font-family:Georgia, serif; font-size:0.85rem;
+    font-weight:700; cursor:pointer;
+  }
+  .payment-lines-list{ margin-top:8px; }
+  .payment-line-row{
+    display:flex; align-items:center; gap:10px; padding:11px 4px;
+    border-bottom:1px dashed var(--hairline);
+  }
+  .payment-line-info{ flex:1; min-width:0; }
+  .payment-line-method{ font-size:0.78rem; color:var(--ink); }
+  .payment-line-amt{ font-size:0.88rem; font-weight:700; color:var(--gold); flex-shrink:0; }
+  .payment-line-remove{
+    width:28px; height:28px; border-radius:50%; border:1px solid var(--hairline);
+    background:var(--paper); color:var(--ink-soft); font-size:1.1rem; line-height:1;
+    cursor:pointer; flex-shrink:0; display:flex; align-items:center; justify-content:center;
+  }
+
   .qty-stepper{ display:flex; align-items:center; gap:12px; margin-bottom:14px; }
   .qty-btn{
     width:44px; height:44px; border-radius:50%; border:1px solid var(--hairline);
@@ -381,27 +422,33 @@
     background:#2E7D46; border-color:#2E7D46;
   }
 
-  .util-row{ display:flex; gap:10px; margin-top:14px; }
+  .util-section-card{
+    margin-top:20px; padding:14px 12px 12px; border-radius:18px;
+    background:rgba(168,118,58,0.07); border:1px solid rgba(168,118,58,0.35);
+  }
+  .util-section-label{
+    font-family: ui-monospace, "Courier New", monospace;
+    font-size:0.68rem; font-weight:700; letter-spacing:0.06em;
+    text-transform:uppercase; color:var(--gold); margin-bottom:10px;
+    text-align:center;
+  }
+  .util-row{ display:flex; gap:8px; }
   .util-bar-btn{
-    flex:1; display:flex; align-items:center; gap:10px;
-    padding:12px; border-radius:14px; border:1.5px dashed var(--gold);
-    background:var(--paper-raised); cursor:pointer; text-align:left;
+    flex:1; min-width:0; display:flex; flex-direction:column; align-items:center; gap:6px;
+    padding:12px 4px; border-radius:14px; border:1.5px dashed var(--gold);
+    background:var(--paper-raised); cursor:pointer; text-align:center;
     box-shadow:0 3px 8px rgba(20,16,10,0.06);
   }
   .util-bar-icon{
-    width:36px; height:36px; border-radius:50%; flex-shrink:0;
+    width:30px; height:30px; border-radius:50%; flex-shrink:0;
     display:flex; align-items:center; justify-content:center;
   }
-  .util-bar-icon svg{ width:18px; height:18px; color:#FBF8F0; }
+  .util-bar-icon svg{ width:15px; height:15px; color:#FBF8F0; }
   .util-bar-title{
     font-family: ui-monospace, "Courier New", monospace;
-    font-size:0.72rem; font-weight:800; letter-spacing:0.03em;
-    text-transform:uppercase; color:var(--ink); line-height:1.35;
-    -webkit-text-stroke: 0.3px currentColor;
-  }
-  .util-bar-sub{
-    font-weight:600; color:var(--ink-soft); letter-spacing:0.01em;
-    -webkit-text-stroke: 0;
+    font-size:0.6rem; font-weight:800; letter-spacing:0.015em;
+    text-transform:uppercase; color:var(--ink); line-height:1.32;
+    -webkit-text-stroke: 0.25px currentColor;
   }
 
   .rate-row{
@@ -821,8 +868,9 @@ function clearFlightInfo(){
     localStorage.removeItem('flight_date');
     localStorage.removeItem('flight_number');
     localStorage.removeItem('flight_sector');
-    localStorage.removeItem('flight_staff_no');
-    localStorage.removeItem('flight_staff_name');
+    // CSS Staff No and CSS Name are intentionally kept — the same crew member
+    // typically operates this device across multiple flights, so re-entering
+    // their details every time would just be repeated busywork.
   } catch(e){}
 }
 function flightDetailsComplete(){
@@ -999,23 +1047,54 @@ function saveSessionsHistory(list){
   try{ localStorage.setItem('sales_sessions', JSON.stringify(list)); } catch(e){}
 }
 
-function completeSale(){
+function loadPaymentsLog(){
+  try{ return JSON.parse(localStorage.getItem('payments_log') || '[]'); } catch(e){ return []; }
+}
+function savePaymentsLog(list){
+  try{ localStorage.setItem('payments_log', JSON.stringify(list)); } catch(e){}
+}
+function recordPayment(info){
+  const log = loadPaymentsLog();
+  log.push(info);
+  savePaymentsLog(log);
+}
+function getCurrencyRate(code){
+  if(code === 'USD') return 1;
+  const r = CONVERSION_RATES.rates.find(r => r.code === code);
+  return r ? r.rate : null;
+}
+function paymentLinesTotalUSD(){
+  return state.paymentLines.reduce((s,l) => s + l.amountUSD, 0);
+}
+function goToPayment(){
   if(cart.length === 0) return;
+  state.paymentMethod = null;
+  state.paymentLines = [];
+  state.view = 'payment';
+  window.scrollTo(0,0);
+  render();
+}
+function finalizeSale(){
   const total = cartTotal();
-  showConfirm(`Complete sale for ${fmt(total)}? This will update stock levels.`, () => {
-    cart.forEach(c => {
-      const stock = getStock(c.itemCode);
-      setStock(c.itemCode, Math.max(0, stock - c.qty));
-    });
-    recordSale(cart);
-    cart = [];
-    saveCart();
-    showToast(`Sale completed — ${fmt(total)}`);
-    updateCartBadge();
-    state.view = 'home';
-    window.scrollTo(0,0);
-    render();
+  cart.forEach(c => {
+    const stock = getStock(c.itemCode);
+    setStock(c.itemCode, Math.max(0, stock - c.qty));
   });
+  recordSale(cart);
+  recordPayment({
+    timestamp: Date.now(), total,
+    method: state.paymentMethod,
+    lines: state.paymentLines
+  });
+  cart = [];
+  saveCart();
+  showToast(`Sale completed — ${fmt(total)}`);
+  updateCartBadge();
+  state.paymentMethod = null;
+  state.paymentLines = [];
+  state.view = 'home';
+  window.scrollTo(0,0);
+  render();
 }
 
 function catCounts(){
@@ -1030,7 +1109,7 @@ function fmt(n){
 
 function catClass(idx){ return 'jc' + (idx % 7); }
 
-const state = { view:'home', category:null, query:'', allowanceQuery:'', stockCategory:null };
+const state = { view:'home', category:null, query:'', allowanceQuery:'', stockCategory:null, paymentMethod:null, paymentLines:[] };
 
 function render(){
   const main = document.getElementById('mainView');
@@ -1056,6 +1135,9 @@ function render(){
   } else if(state.view === 'cart'){
     tagline.textContent = 'Review and complete the sale';
     renderCart(main);
+  } else if(state.view === 'payment'){
+    tagline.textContent = 'Choose how the customer is paying';
+    renderPayment(main);
   } else if(state.view === 'session'){
     tagline.textContent = 'Passenger and crew sales for this flight';
     renderSessionSummary(main);
@@ -1148,27 +1230,28 @@ function renderHome(main){
   });
   html += '</div>';
   html += `
-    <div class="util-row">
-      <button class="util-bar-btn" id="flightHistoryBtn" type="button">
-        <div class="util-bar-icon" style="background:linear-gradient(135deg, #4A4238 0%, #2A241C 100%);">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3.5 2"/></svg>
-        </div>
-        <div class="util-bar-title">Flight Sales History</div>
-      </button>
-      <button class="util-bar-btn" id="allowancesBtn" type="button">
-        <div class="util-bar-icon" style="background:linear-gradient(135deg, #253E6B 0%, #16223E 100%);">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><circle cx="12" cy="12" r="9"/><path d="M3 12h18"/><path d="M12 3c2.5 2.5 2.5 15.5 0 18M12 3c-2.5 2.5-2.5 15.5 0 18"/></svg>
-        </div>
-        <div class="util-bar-title">Duty Free Allowances</div>
-      </button>
-    </div>
-    <div class="util-row">
-      <button class="util-bar-btn" id="conversionRatesBtn" type="button">
-        <div class="util-bar-icon" style="background:linear-gradient(135deg, #6B5A25 0%, #3E3316 100%);">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><circle cx="7.5" cy="9.5" r="4.5"/><circle cx="16.5" cy="14.5" r="4.5"/></svg>
-        </div>
-        <div class="util-bar-title">Conversion Rates <span class="util-bar-sub">(${escapeHtml(conversionRatesValidityLabel())})</span></div>
-      </button>
+    <div class="util-section-card">
+      <div class="util-section-label">Tools & Reports</div>
+      <div class="util-row">
+        <button class="util-bar-btn" id="flightHistoryBtn" type="button">
+          <div class="util-bar-icon" style="background:linear-gradient(135deg, #4A4238 0%, #2A241C 100%);">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3.5 2"/></svg>
+          </div>
+          <div class="util-bar-title">Sales History</div>
+        </button>
+        <button class="util-bar-btn" id="allowancesBtn" type="button">
+          <div class="util-bar-icon" style="background:linear-gradient(135deg, #253E6B 0%, #16223E 100%);">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><circle cx="12" cy="12" r="9"/><path d="M3 12h18"/><path d="M12 3c2.5 2.5 2.5 15.5 0 18M12 3c-2.5 2.5-2.5 15.5 0 18"/></svg>
+          </div>
+          <div class="util-bar-title">Duty Free Allowances</div>
+        </button>
+        <button class="util-bar-btn" id="conversionRatesBtn" type="button">
+          <div class="util-bar-icon" style="background:linear-gradient(135deg, #6B5A25 0%, #3E3316 100%);">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><circle cx="7.5" cy="9.5" r="4.5"/><circle cx="16.5" cy="14.5" r="4.5"/></svg>
+          </div>
+          <div class="util-bar-title">Currency Rates</div>
+        </button>
+      </div>
     </div>
   `;
   main.innerHTML = html;
@@ -1499,7 +1582,7 @@ function renderCart(main){
       cart = []; saveCart(); renderCart(main); updateCartBadge();
     });
   });
-  document.getElementById('completeSaleBtn').addEventListener('click', completeSale);
+  document.getElementById('completeSaleBtn').addEventListener('click', goToPayment);
   wireFloatingHomeBar();
 }
 
@@ -1513,8 +1596,30 @@ function computeSummaryTotals(log){
   return { passengerItems, crewItems, passengerTotal, crewTotal, grandTotal: passengerTotal + crewTotal };
 }
 
-function buildReportHtml(meta, log, stockRows){
+function summarizePayments(payments){
+  let cardUSD = 0, voucherUSD = 0;
+  const cashByCurrency = {};
+  (payments || []).forEach(p => {
+    (p.lines || []).forEach(l => {
+      if(l.method === 'card'){
+        cardUSD += l.amountUSD;
+      } else if(l.method === 'voucher'){
+        voucherUSD += l.amountUSD;
+      } else if(l.method === 'cash'){
+        const cur = l.currency || 'USD';
+        if(!cashByCurrency[cur]) cashByCurrency[cur] = { foreign: 0, usd: 0 };
+        cashByCurrency[cur].foreign += l.amountForeign;
+        cashByCurrency[cur].usd += l.amountUSD;
+      }
+    });
+  });
+  const cashUSD = Object.values(cashByCurrency).reduce((s,c) => s + c.usd, 0);
+  return { cardUSD, voucherUSD, cashByCurrency, cashUSD, totalUSD: cardUSD + voucherUSD + cashUSD };
+}
+
+function buildReportHtml(meta, log, stockRows, payments){
   const { passengerItems, crewItems, passengerTotal, crewTotal, grandTotal } = computeSummaryTotals(log);
+  const paySummary = summarizePayments(payments);
 
   function salesRows(items){
     if(items.length === 0) return '<tr><td colspan="5" class="rpt-empty">No items in this section.</td></tr>';
@@ -1571,6 +1676,23 @@ function buildReportHtml(meta, log, stockRows){
 
       <div class="rpt-grand-total"><span>Grand Total</span><span>${fmt(grandTotal)}</span></div>
 
+      <div class="rpt-section-title">Payment Summary</div>
+      <table class="rpt-table">
+        <tr><th>Method</th><th class="num">Amount</th></tr>
+        ${paySummary.totalUSD === 0
+          ? '<tr><td colspan="2" class="rpt-empty">No payments recorded for this flight.</td></tr>'
+          : `
+            ${paySummary.cardUSD > 0 ? `<tr><td>Credit Card</td><td class="num">${fmt(paySummary.cardUSD)}</td></tr>` : ''}
+            ${paySummary.voucherUSD > 0 ? `<tr><td>Onboard Vouchers</td><td class="num">${fmt(paySummary.voucherUSD)}</td></tr>` : ''}
+            ${Object.keys(paySummary.cashByCurrency).sort().map(cur => {
+              const c = paySummary.cashByCurrency[cur];
+              return `<tr><td>Cash — ${escapeHtml(cur)}</td><td class="num">${cur === 'USD' ? fmt(c.foreign) : `${c.foreign.toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2})} ${escapeHtml(cur)} (${fmt(c.usd)})`}</td></tr>`;
+            }).join('')}
+          `
+        }
+        <tr class="rpt-subtotal-row"><td>Total Collected</td><td class="num">${fmt(paySummary.totalUSD)}</td></tr>
+      </table>
+
       <div class="rpt-section-title">Stock Reconciliation</div>
       <table class="rpt-table">
         <tr><th>No.</th><th>Item</th><th>Code</th><th class="num">Opening</th><th class="num">Sold</th><th class="num">Closing</th></tr>
@@ -1582,10 +1704,174 @@ function buildReportHtml(meta, log, stockRows){
   `;
 }
 
-function downloadFlightReport(meta, log, stockRows){
+function downloadFlightReport(meta, log, stockRows, payments){
   const area = document.getElementById('reportPrintArea');
-  area.innerHTML = buildReportHtml(meta, log, stockRows);
+  area.innerHTML = buildReportHtml(meta, log, stockRows, payments);
   window.print();
+}
+
+const PAYMENT_METHOD_LABELS = { card: 'Credit Card', voucher: 'Onboard Vouchers', cash: 'Cash', mix: 'Mix' };
+
+function renderPayment(main){
+  const total = cartTotal();
+  const method = state.paymentMethod;
+  const collected = paymentLinesTotalUSD();
+  const remaining = total - collected;
+  const fullyCovered = method && (method === 'card' || method === 'voucher' || remaining <= 0.005);
+
+  let html = `
+    <div class="list-title">Payment</div>
+    <div class="list-count">Total due: ${fmt(total)}</div>
+    <div class="section-label" style="margin-top:16px;">Method of Payment</div>
+    <div class="payment-method-grid">
+      <button class="payment-method-btn${method==='card'?' selected':''}" data-method="card" type="button">Credit Card</button>
+      <button class="payment-method-btn${method==='voucher'?' selected':''}" data-method="voucher" type="button">Onboard Vouchers</button>
+      <button class="payment-method-btn${method==='cash'?' selected':''}" data-method="cash" type="button">Cash</button>
+      <button class="payment-method-btn${method==='mix'?' selected':''}" data-method="mix" type="button">Mix</button>
+    </div>
+  `;
+
+  if(method === 'card' || method === 'voucher'){
+    html += `
+      <div class="price-panel" style="margin-top:6px;">
+        <div class="price-line"><div class="lbl">Settled via ${escapeHtml(PAYMENT_METHOD_LABELS[method])}</div><div class="val">${fmt(total)}</div></div>
+      </div>
+      <div class="stock-note">The full amount will be recorded as settled via ${escapeHtml(PAYMENT_METHOD_LABELS[method])}.</div>
+    `;
+  } else if(method === 'cash' || method === 'mix'){
+    html += `
+      <div class="section-label" style="margin-top:16px;">Add Payment</div>
+      <div class="payment-line-form">
+        ${method === 'mix' ? `
+        <select id="lineMethodSelect" class="payment-select">
+          <option value="cash">Cash</option>
+          <option value="card">Credit Card</option>
+          <option value="voucher">Onboard Voucher</option>
+        </select>` : ''}
+        <select id="lineCurrencySelect" class="payment-select" style="display:${method==='cash' ? 'block':'none'};">
+          <option value="USD">USD</option>
+          ${CONVERSION_RATES.rates.map(r => `<option value="${escapeAttr(r.code)}">${escapeHtml(r.code)}</option>`).join('')}
+        </select>
+        <input type="number" id="lineAmountInput" class="payment-amount-input" placeholder="Amount" inputmode="decimal" min="0" step="0.01">
+        <button class="payment-add-btn" id="addLineBtn" type="button">Add</button>
+      </div>
+      <div class="stock-note" id="amountDueHint" style="margin:0 0 4px;"></div>
+      <div class="payment-lines-list">
+        ${state.paymentLines.length === 0
+          ? '<div class="empty-state" style="padding:16px 4px;">No payment lines added yet.</div>'
+          : state.paymentLines.map((l, idx) => `
+            <div class="payment-line-row">
+              <div class="payment-line-info">
+                <div class="payment-line-method mono">${escapeHtml(PAYMENT_METHOD_LABELS[l.method])}${l.method==='cash' ? ` · ${escapeHtml(l.currency)} ${l.amountForeign.toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2})}` : ''}</div>
+              </div>
+              <div class="payment-line-amt mono">${fmt(l.amountUSD)}</div>
+              <button class="payment-line-remove" data-idx="${idx}" type="button" aria-label="Remove">×</button>
+            </div>
+          `).join('')
+        }
+      </div>
+      <div class="session-subtotal" style="margin-top:10px;"><span>Collected</span><span class="mono">${fmt(collected)}</span></div>
+      <div class="session-subtotal"><span>${remaining > 0 ? 'Remaining' : 'Change / Overage'}</span><span class="mono">${fmt(Math.abs(remaining))}</span></div>
+    `;
+  } else {
+    html += `<div class="stock-note" style="margin-top:6px;">Select a method of payment above to continue.</div>`;
+  }
+
+  html += `
+    <div class="cart-footer">
+      <button class="add-cart-btn" id="cancelPaymentBtn" type="button" style="background:var(--paper-raised); color:var(--ink); border:1px solid var(--hairline); margin-bottom:8px;">‹ Back to Cart</button>
+      <button class="add-cart-btn" id="confirmPaymentBtn" type="button" ${fullyCovered ? '' : 'disabled'}>Confirm & Complete Sale</button>
+    </div>
+  `;
+
+  main.innerHTML = html;
+
+  main.querySelectorAll('.payment-method-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const m = btn.dataset.method;
+      state.paymentMethod = m;
+      if(m === 'card' || m === 'voucher'){
+        state.paymentLines = [{ method: m, currency: 'USD', amountForeign: total, amountUSD: total }];
+      } else {
+        state.paymentLines = [];
+      }
+      renderPayment(main);
+    });
+  });
+
+  const lineMethodSelect = document.getElementById('lineMethodSelect');
+  const lineCurrencySelect = document.getElementById('lineCurrencySelect');
+  const lineAmountInput = document.getElementById('lineAmountInput');
+  const amountDueHint = document.getElementById('amountDueHint');
+
+  function updateAmountDefault(){
+    if(!lineAmountInput) return;
+    const remainingNow = Math.max(0, cartTotal() - paymentLinesTotalUSD());
+    const currentMethod = lineMethodSelect ? lineMethodSelect.value : 'cash';
+    let dueForeign = remainingNow;
+    let currencyLabel = 'USD';
+    if(currentMethod === 'cash' && lineCurrencySelect){
+      currencyLabel = lineCurrencySelect.value;
+      const rate = getCurrencyRate(currencyLabel);
+      dueForeign = currencyLabel === 'USD' ? remainingNow : remainingNow * rate;
+    }
+    lineAmountInput.value = dueForeign.toFixed(2);
+    if(amountDueHint){
+      amountDueHint.textContent = remainingNow > 0.005
+        ? `To settle the balance: ${dueForeign.toFixed(2)} ${currencyLabel}`
+        : 'Balance already covered.';
+    }
+  }
+  updateAmountDefault();
+
+  if(lineMethodSelect){
+    lineMethodSelect.addEventListener('change', () => {
+      lineCurrencySelect.style.display = lineMethodSelect.value === 'cash' ? 'block' : 'none';
+      updateAmountDefault();
+    });
+  }
+  lineCurrencySelect?.addEventListener('change', updateAmountDefault);
+
+  document.getElementById('addLineBtn')?.addEventListener('click', () => {
+    const lineMethod = lineMethodSelect ? lineMethodSelect.value : 'cash';
+    const amountInput = document.getElementById('lineAmountInput');
+    const amountForeign = parseFloat(amountInput.value);
+    if(!amountForeign || amountForeign <= 0){
+      showToast('Enter a valid amount');
+      return;
+    }
+    let currency = 'USD';
+    let amountUSD = amountForeign;
+    if(lineMethod === 'cash'){
+      currency = lineCurrencySelect.value;
+      const rate = getCurrencyRate(currency);
+      amountUSD = currency === 'USD' ? amountForeign : amountForeign / rate;
+    }
+    state.paymentLines.push({ method: lineMethod, currency, amountForeign, amountUSD });
+    renderPayment(main);
+  });
+
+  main.querySelectorAll('.payment-line-remove').forEach(btn => {
+    btn.addEventListener('click', () => {
+      state.paymentLines.splice(Number(btn.dataset.idx), 1);
+      renderPayment(main);
+    });
+  });
+
+  document.getElementById('cancelPaymentBtn').addEventListener('click', () => {
+    state.paymentMethod = null;
+    state.paymentLines = [];
+    state.view = 'cart';
+    window.scrollTo(0,0);
+    render();
+  });
+
+  document.getElementById('confirmPaymentBtn').addEventListener('click', () => {
+    if(!fullyCovered) return;
+    showConfirm(`Complete sale for ${fmt(total)} via ${PAYMENT_METHOD_LABELS[state.paymentMethod]}? This will update stock levels.`, () => {
+      finalizeSale();
+    });
+  });
 }
 
 function renderSessionSummary(main){
@@ -1651,7 +1937,8 @@ function renderSessionSummary(main){
     downloadFlightReport(
       { flightNumber: flightInfo.number, flightDate: flightInfo.date, sector: flightInfo.sector, staffNo: flightInfo.staffNo, staffName: flightInfo.staffName },
       log,
-      buildStockReportRows(log)
+      buildStockReportRows(log),
+      loadPaymentsLog()
     );
   });
 
@@ -1664,18 +1951,22 @@ function renderSessionSummary(main){
           flightDate: flightInfo.date, flightNumber: flightInfo.number,
           sector: flightInfo.sector, staffNo: flightInfo.staffNo, staffName: flightInfo.staffName,
           lines: log, passengerTotal, crewTotal, grandTotal,
-          stockReport: buildStockReportRows(log)
+          stockReport: buildStockReportRows(log),
+          payments: loadPaymentsLog()
         };
         const hist = loadSessionsHistory();
         hist.push(archived);
         saveSessionsHistory(hist);
         saveSalesLog([]);
+        savePaymentsLog([]);
         resetAllStock();
         clearAllOpeningStockSnapshots();
         clearConfirmedCategories();
         clearFlightInfo();
-        showToast('Flight closed — stock reset for the next flight');
-        renderSessionSummary(main);
+        showToast('Flight closed — ready to open the next flight');
+        state.view = 'home';
+        window.scrollTo(0,0);
+        render();
       });
     });
   }
@@ -1722,7 +2013,8 @@ function renderFlightHistory(main){
         downloadFlightReport(
           { flightNumber: archived.flightNumber, flightDate: archived.flightDate, closedAt: archived.closedAt, sector: archived.sector, staffNo: archived.staffNo, staffName: archived.staffName },
           archived.lines,
-          archived.stockReport || []
+          archived.stockReport || [],
+          archived.payments || []
         );
       } else if(btn.dataset.action === 'delete'){
         const label = archived.flightNumber || archived.flightDate || new Date(archived.closedAt).toLocaleDateString();
