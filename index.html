@@ -197,7 +197,7 @@
   .floating-home-bar-inner{ width:100%; max-width:640px; pointer-events:auto; display:flex; justify-content:center; }
   .floating-home-btn{
     width:auto; padding:11px 26px; border:none; border-radius:999px;
-    background:var(--ink); color:var(--paper-raised); font-family:Georgia, serif;
+    background:#E07A2C; color:#FBF8F0; font-family:Georgia, serif;
     font-size:0.86rem; font-weight:700; cursor:pointer;
     box-shadow:0 6px 18px rgba(20,16,10,0.22);
     display:inline-flex; align-items:center; justify-content:center; gap:7px;
@@ -2336,21 +2336,24 @@ function openSheet(it){
     : (avail === 0 ? 'Out of stock' : `${avail} in stock`);
 
   const txType = cartTransactionType();
+  const hasSpecial = it.specialPrice !== undefined;
   const lockPassengerOpts = txType === 'crew';
   const lockCrewOpt = txType === 'passenger';
-  const listedSelected = !lockPassengerOpts;
+  const lockListedOpt = lockPassengerOpts || hasSpecial;
+  const listedSelected = !lockListedOpt;
+  const specialSelected = hasSpecial && !lockPassengerOpts;
   const crewSelected = txType === 'crew';
 
   let priceChoiceHtml = `
     <div class="price-choice">
-      <label class="price-opt${lockPassengerOpts ? ' disabled' : (listedSelected ? ' selected' : '')}" data-value="listed">
-        <input type="radio" name="priceChoice" value="listed" ${lockPassengerOpts ? 'disabled' : ''} ${listedSelected ? 'checked' : ''}>
+      <label class="price-opt${lockListedOpt ? ' disabled' : (listedSelected ? ' selected' : '')}" data-value="listed">
+        <input type="radio" name="priceChoice" value="listed" ${lockListedOpt ? 'disabled' : ''} ${listedSelected ? 'checked' : ''}>
         <span>Listed<b>${fmt(it.listedPrice)}</b></span>
       </label>`;
   if(it.specialPrice !== undefined){
     priceChoiceHtml += `
-      <label class="price-opt${lockPassengerOpts ? ' disabled' : ''}" data-value="special">
-        <input type="radio" name="priceChoice" value="special" ${lockPassengerOpts ? 'disabled' : ''}>
+      <label class="price-opt${lockPassengerOpts ? ' disabled' : (specialSelected ? ' selected' : '')}" data-value="special">
+        <input type="radio" name="priceChoice" value="special" ${lockPassengerOpts ? 'disabled' : ''} ${specialSelected ? 'checked' : ''}>
         <span>Special<b>${fmt(it.specialPrice)}</b></span>
       </label>`;
   }
@@ -2428,7 +2431,7 @@ function openSheet(it){
     const newType = isPassengerLabel(priceLabel) ? 'passenger' : 'crew';
     const existingType = cartTransactionType();
     if(existingType && existingType !== newType){
-      showToast(`Cart already has ${existingType} sales — clear or complete it before adding ${newType} sales.`);
+      showToast(`Cart already has ${existingType === 'crew' ? 'staff' : existingType} sales — clear or complete it before adding ${newType === 'crew' ? 'staff' : newType} sales.`);
       return;
     }
     addToCart(it, qty, unitPrice, priceLabel);
