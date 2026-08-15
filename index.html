@@ -80,6 +80,13 @@
   .tagline{
     margin-top:6px; font-size:0.85rem; color:var(--ink-soft); font-style:italic;
   }
+  .datetime-bar{
+    margin-top:5px; font-family: ui-monospace, "Courier New", monospace;
+    font-size:0.7rem; letter-spacing:0.02em; color:var(--ink-soft); opacity:0.85;
+  }
+  .datetime-time{ color:var(--gold); font-weight:700; opacity:1; }
+  .clock-colon{ animation: clock-blink 1s steps(1, end) infinite; }
+  @keyframes clock-blink{ 50%{ opacity:0; } }
   .gold-rule{
     height:2px; margin-top:12px; border-radius:2px;
     background:linear-gradient(90deg, var(--gold) 0%, var(--gold-light) 50%, var(--gold) 100%);
@@ -362,6 +369,11 @@
 
   .cat-grid{
     display:grid; grid-template-columns: 1fr 1fr; gap:14px;
+  }
+  .cat-grid .cat-card:last-child:nth-child(odd){
+    grid-column: 1 / -1;
+    justify-self: center;
+    width: calc(50% - 7px);
   }
   .cat-card{
     position:relative;
@@ -694,6 +706,7 @@
   </div>
   <div class="gold-rule"></div>
   <div class="tagline" id="tagline">Issue No. 35 — browse the full collection by category</div>
+  <div class="datetime-bar" id="datetimeBar"></div>
   <div class="quick-actions">
     <button class="qa-btn" id="stockBtn" type="button">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M22 2L11 13"/><path d="M22 2l-7 20-4-9-9-4 20-7z"/></svg>
@@ -1000,6 +1013,26 @@ function updateFlightInfoBar(){
   `;
   bar.style.display = 'flex';
 }
+function updateDateTimeBar(){
+  const bar = document.getElementById('datetimeBar');
+  if(!bar) return;
+  const now = new Date();
+  const datePart = now.toLocaleDateString(undefined, { weekday:'short', day:'2-digit', month:'short', year:'numeric' });
+  const timePart = now.toLocaleTimeString(undefined, { hour:'2-digit', minute:'2-digit' });
+  let tzPart = '';
+  try{
+    const parts = new Intl.DateTimeFormat(undefined, { timeZoneName:'short' }).formatToParts(now);
+    const found = parts.find(p => p.type === 'timeZoneName');
+    tzPart = found ? found.value : '';
+  } catch(e){ /* fall through */ }
+  if(!tzPart){
+    try{ tzPart = Intl.DateTimeFormat().resolvedOptions().timeZone || ''; } catch(e){ tzPart = ''; }
+  }
+  const timePartHtml = escapeHtml(timePart).replace(':', '<span class="clock-colon">:</span>');
+  bar.innerHTML = `${escapeHtml(datePart)} · <span class="datetime-time">${timePartHtml}</span>${tzPart ? ' (' + escapeHtml(tzPart) + ')' : ''}`;
+}
+setInterval(updateDateTimeBar, 15000);
+updateDateTimeBar();
 /* ---------- Sales log (records what's actually sold, for the Session Summary) ---------- */
 function loadSalesLog(){
   try{ return JSON.parse(localStorage.getItem('sales_log') || '[]'); } catch(e){ return []; }
@@ -1150,6 +1183,7 @@ function render(){
   updateSessionButtonState();
   updateStockButtonLabel();
   updateFlightInfoBar();
+  updateDateTimeBar();
   if(state.query.trim().length > 0){
     renderSearch(main);
     tagline.textContent = 'Searching the full catalog';
@@ -1892,6 +1926,8 @@ function renderPayment(main){
       dueForeign = currencyLabel === 'USD' ? remainingNow : remainingNow * rate;
     }
     lineAmountInput.value = dueForeign.toFixed(2);
+    lineAmountInput.focus();
+    lineAmountInput.select();
     if(amountDueHint){
       amountDueHint.textContent = remainingNow > 0.005
         ? `To settle the balance: ${dueForeign.toFixed(2)} ${currencyLabel}`
@@ -2470,6 +2506,35 @@ function escapeAttr(str){ return escapeHtml(str); }
 
 loadCart();
 render();
+
+/* On the Home screen, pressing the device/browser back button asks for
+   confirmation instead of immediately leaving the app. From any other
+   screen, back navigates in-app to Home first (one tap = go home, not exit),
+   matching how most mobile apps behave. Uses the History API since this is
+   a single-page app with no per-screen URLs of its own. */
+function pushExitGuardState(){
+  try{ history.pushState({ appGuard: true }, '', location.href); } catch(e){}
+}
+pushExitGuardState();
+let allowExitNow = false;
+window.addEventListener('popstate', () => {
+  if(allowExitNow) return;
+  if(state.view !== 'home'){
+    state.view = 'home';
+    state.category = null;
+    state.query = '';
+    state.allowanceQuery = '';
+    window.scrollTo(0,0);
+    render();
+    pushExitGuardState();
+    return;
+  }
+  showConfirm('Do you want to exit from the Application?', () => {
+    allowExitNow = true;
+    try{ history.back(); } catch(e){}
+  });
+  pushExitGuardState();
+});
 
 /* Proactively fetch every bundled item photo once, while online, so the
    service worker's image cache has them ready before the device goes
