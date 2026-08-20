@@ -1209,6 +1209,26 @@ function buildStockReportRows(log){
     .filter(Boolean)
     .sort((a,b) => a.itemNo - b.itemNo);
 }
+function buildPreorderStockReportRows(log){
+  const soldByCode = {};
+  log.forEach(l => {
+    if(!l.fromPreorder) return;
+    soldByCode[l.itemCode] = (soldByCode[l.itemCode] || 0) + l.qty;
+  });
+  return ITEMS
+    .map(it => {
+      const closing = getPreorderStock(it.itemCode);
+      const sold = soldByCode[it.itemCode] || 0;
+      const opening = closing + sold; // derived, so Opening = Sold + Closing always holds exactly
+      if(opening === 0) return null;
+      return {
+        itemNo: it.itemNo, name: it.name, itemCode: it.itemCode, category: it.category,
+        opening, sold, closing
+      };
+    })
+    .filter(Boolean)
+    .sort((a,b) => a.itemNo - b.itemNo);
+}
 function loadSessionsHistory(){
   try{ return JSON.parse(localStorage.getItem('sales_sessions') || '[]'); } catch(e){ return []; }
 }
@@ -2137,7 +2157,7 @@ function summarizePayments(payments){
   return { cardUSD, voucherUSD, cashByCurrency, cashUSD, totalUSD: cardUSD + voucherUSD + cashUSD };
 }
 
-function buildReportHtml(meta, log, stockRows, payments){
+function buildReportHtml(meta, log, stockRows, payments, preorderStockRows){
   const {
     passengerItems, crewItems, preorderPassengerItems, preorderCrewItems,
     passengerTotal, crewTotal, preorderPassengerTotal, preorderCrewTotal, grandTotal
@@ -2176,6 +2196,17 @@ function buildReportHtml(meta, log, stockRows, payments){
   const stockRowsHtml = stockRows.length === 0
     ? '<tr><td colspan="6" class="rpt-empty">No stock recorded for this flight.</td></tr>'
     : stockRows.map(r => `
+      <tr>
+        <td>${String(r.itemNo).padStart(2,'0')}</td>
+        <td>${escapeHtml(r.name)}</td>
+        <td>${escapeHtml(r.itemCode)}</td>
+        <td class="num">${r.opening}</td>
+        <td class="num">${r.sold}</td>
+        <td class="num">${r.closing}</td>
+      </tr>`).join('');
+  const preorderStockRowsHtml = !preorderStockRows || preorderStockRows.length === 0
+    ? '<tr><td colspan="6" class="rpt-empty">No pre-order stock recorded for this flight.</td></tr>'
+    : preorderStockRows.map(r => `
       <tr>
         <td>${String(r.itemNo).padStart(2,'0')}</td>
         <td>${escapeHtml(r.name)}</td>
@@ -2247,10 +2278,16 @@ function buildReportHtml(meta, log, stockRows, payments){
         <tr class="rpt-subtotal-row"><td>Total Collected</td><td class="num">${fmt(paySummary.totalUSD)}</td></tr>
       </table>
 
-      <div class="rpt-section-title">Stock Reconciliation</div>
+      <div class="rpt-section-title">Normal Stock Reconciliation</div>
       <table class="rpt-table">
         <tr><th>No.</th><th>Item</th><th>Code</th><th class="num">Opening</th><th class="num">Sold</th><th class="num">Closing</th></tr>
         ${stockRowsHtml}
+      </table>
+
+      <div class="rpt-section-title">Pre-Order Stock Reconciliation</div>
+      <table class="rpt-table">
+        <tr><th>No.</th><th>Item</th><th>Code</th><th class="num">Opening</th><th class="num">Sold</th><th class="num">Balance</th></tr>
+        ${preorderStockRowsHtml}
       </table>
 
       <div class="rpt-section-title">Crew Incentive Calculation</div>
@@ -2266,9 +2303,9 @@ function buildReportHtml(meta, log, stockRows, payments){
   `;
 }
 
-function downloadFlightReport(meta, log, stockRows, payments){
+function downloadFlightReport(meta, log, stockRows, payments, preorderStockRows){
   const area = document.getElementById('reportPrintArea');
-  area.innerHTML = buildReportHtml(meta, log, stockRows, payments);
+  area.innerHTML = buildReportHtml(meta, log, stockRows, payments, preorderStockRows);
   window.print();
 }
 
@@ -2508,7 +2545,8 @@ function renderSessionSummary(main){
       { flightNumber: flightInfo.number, flightDate: flightInfo.date, sector: flightInfo.sector, staffNo: flightInfo.staffNo, staffName: flightInfo.staffName },
       log,
       buildStockReportRows(log),
-      loadPaymentsLog()
+      loadPaymentsLog(),
+      buildPreorderStockReportRows(log)
     );
   });
 
@@ -2522,6 +2560,7 @@ function renderSessionSummary(main){
           sector: flightInfo.sector, staffNo: flightInfo.staffNo, staffName: flightInfo.staffName,
           lines: log, passengerTotal, crewTotal, grandTotal,
           stockReport: buildStockReportRows(log),
+          preorderStockReport: buildPreorderStockReportRows(log),
           payments: loadPaymentsLog()
         };
         const hist = loadSessionsHistory();
@@ -2586,7 +2625,8 @@ function renderFlightHistory(main){
           { flightNumber: archived.flightNumber, flightDate: archived.flightDate, closedAt: archived.closedAt, sector: archived.sector, staffNo: archived.staffNo, staffName: archived.staffName },
           archived.lines,
           archived.stockReport || [],
-          archived.payments || []
+          archived.payments || [],
+          archived.preorderStockReport || []
         );
       } else if(btn.dataset.action === 'delete'){
         const label = archived.flightNumber || archived.flightDate || new Date(archived.closedAt).toLocaleDateString();
